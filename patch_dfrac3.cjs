@@ -1,0 +1,9 @@
+const fs = require('fs');
+let content = fs.readFileSync('server.ts', 'utf8');
+
+content = content.replace(/4\. Provide a detailed, step-by-step solution wrapped inside \\loigiai\{ \.\.\. \} placed before \\end\{ex\}\./g, 
+"4. Provide a detailed, step-by-step solution wrapped inside \\loigiai{ ... } placed before \\end{ex}.\n5. Use \\dfrac instead of \\frac for all fractions.");
+
+content = content.replace(/5\. Only output the LaTeX code\./g, "6. Only output the LaTeX code.");
+
+fs.writeFileSync('server.ts', content);
