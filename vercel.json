@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/compile-pdf.ts": {
+      "includeFiles": "{main.tex,ex_test.sty,randomlist.sty,randomlist.tex}"
+    }
+  }
+}
