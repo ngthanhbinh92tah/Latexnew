@@ -25,14 +25,14 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [envs, setEnvs] = useState('ex, cau, question, bt, bai, vd');
-  
+
   // Dedupe state
   const [similarityThreshold, setSimilarityThreshold] = useState(95);
   const [result, setResult] = useState<ParseResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [deletedChunkIds, setDeletedChunkIds] = useState<Set<number>>(new Set());
   const [activeTabByGroup, setActiveTabByGroup] = useState<Record<number, number>>({});
-  
+
   // Assign ID state
   const [idListText, setIdListText] = useState('');
   const [useDefaultIds, setUseDefaultIds] = useState(false);
@@ -123,19 +123,19 @@ export default function App() {
 
   const handleAnalyze = () => {
     if (!fileContent) return;
-    
+
     setIsAnalyzing(true);
     // Simulate slight delay for UX feeling of processing
     setTimeout(() => {
       const parsedResult = parseLatex(fileContent, envs, similarityThreshold / 100);
       setResult(parsedResult);
-      
+
       const initialDeleted = new Set<number>();
       parsedResult.chunks.forEach(c => {
         if (c.isDuplicate) initialDeleted.add(c.id);
       });
       setDeletedChunkIds(initialDeleted);
-      
+
       setIsAnalyzing(false);
     }, 300);
   };
@@ -170,18 +170,18 @@ export default function App() {
   const handleFilterFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newFiles = Array.from(e.target.files || []) as File[];
     if (newFiles.length === 0) return;
-    
+
     const updatedFiles = [...filterFiles, ...newFiles];
     setFilterFiles(updatedFiles);
     setFilterResult(null);
-    
+
     const readNewFiles = await Promise.all(newFiles.map(async (f: File) => {
       const text = await f.text();
       return { name: f.name, content: text };
     }));
-    
+
     setFilterFilesContent([...filterFilesContent, ...readNewFiles]);
-    
+
     if (filterFileInputRef.current) {
       filterFileInputRef.current.value = ''; // Reset input so same file can be selected again
     }
@@ -191,18 +191,18 @@ export default function App() {
     const newFiles = [...filterFiles];
     newFiles.splice(index, 1);
     setFilterFiles(newFiles);
-    
+
     const newFilesContent = [...filterFilesContent];
     newFilesContent.splice(index, 1);
     setFilterFilesContent(newFilesContent);
-    
+
     setFilterResult(null);
   };
 
   const handleFilter = () => {
     if (filterFilesContent.length === 0 || !filterIdList) return;
     setIsFiltering(true);
-    
+
     setTimeout(() => {
       const result = filterQuestionsByIds(filterFilesContent, envs, filterIdList, filterIncludeEssay, filterIncludeMultipleChoice);
       setFilterResult(result);
@@ -216,7 +216,7 @@ export default function App() {
   };
 
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-    const [mainTexContent, setMainTexContent] = useState<string>('');
+  const [mainTexContent, setMainTexContent] = useState<string>('');
 
   useEffect(() => {
     // Fetch default main.tex when component mounts
@@ -242,13 +242,26 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ latex: content, mainTex })
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to compile PDF');
       }
-      
+
       const data = await response.json();
-      if (data.url) window.open(data.url, '_blank');
+      if (data.url) {
+        // Chuyển data URL (base64) thành Blob URL để trình duyệt cho phép mở tab mới
+        // (data: URL bị hầu hết trình duyệt chặn khi dùng trực tiếp với window.open)
+        const base64 = data.url.split(',')[1];
+        const byteChars = atob(base64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+      }
     } catch (error) {
       console.error("Error compiling PDF:", error);
       alert("Đã xảy ra lỗi khi biên dịch PDF. Hãy chắc chắn rằng pdflatex đã được cài đặt và nội dung LaTeX hợp lệ.");
@@ -257,7 +270,7 @@ export default function App() {
     }
   };
 
-  
+
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -277,10 +290,10 @@ export default function App() {
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (activeTab !== 'image-to-latex') return;
-      
+
       const items = e.clipboardData?.items;
       if (!items) return;
-      
+
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
@@ -291,7 +304,7 @@ export default function App() {
         }
       }
     };
-    
+
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   }, [activeTab]);
@@ -350,8 +363,8 @@ export default function App() {
       const response = await fetch('/api/doc-to-latex', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          fileBase64: docBase64, 
+        body: JSON.stringify({
+          fileBase64: docBase64,
           mimeType: docFileObj.type || (docFileObj.name.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf'),
           startPage: docStartPage,
           endPage: docEndPage,
@@ -397,7 +410,7 @@ export default function App() {
               LaTeX Duplicate Finder & ID Assigner
             </h1>
           </div>
-          <button 
+          <button
             onClick={() => setShowSettings(true)}
             className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
             title="Cài đặt API Key"
@@ -408,10 +421,10 @@ export default function App() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        
+
         {/* Tabs */}
         <div className="flex gap-4 border-b border-slate-200">
-          <button 
+          <button
             onClick={() => setActiveTab('dedupe')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'dedupe' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -421,7 +434,7 @@ export default function App() {
             </div>
             {activeTab === 'dedupe' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('assign-id')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'assign-id' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -431,7 +444,7 @@ export default function App() {
             </div>
             {activeTab === 'assign-id' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('image-to-latex')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'image-to-latex' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -441,7 +454,7 @@ export default function App() {
             </div>
             {activeTab === 'image-to-latex' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('filter-by-id')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'filter-by-id' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -451,7 +464,7 @@ export default function App() {
             </div>
             {activeTab === 'filter-by-id' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('doc-to-latex')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'doc-to-latex' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -470,7 +483,7 @@ export default function App() {
               1. Cấu hình & Chọn File
             </h2>
           </div>
-          
+
           <div className="p-6 grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               {activeTab !== 'image-to-latex' && activeTab !== 'filter-by-id' && activeTab !== 'doc-to-latex' && (
@@ -540,10 +553,10 @@ export default function App() {
                         Tải file (.txt, .tex)
                       </button>
                     </div>
-                    <input 
-                      type="file" 
-                      ref={idFileInputRef} 
-                      onChange={handleIdFileChange} 
+                    <input
+                      type="file"
+                      ref={idFileInputRef}
+                      onChange={handleIdFileChange}
                       accept=".tex,.txt"
                       className="hidden"
                     />
@@ -581,18 +594,18 @@ export default function App() {
                   </p>
                   <div className="flex items-center gap-4 mt-3">
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                      <input 
-                        type="checkbox" 
-                        checked={filterIncludeMultipleChoice} 
+                      <input
+                        type="checkbox"
+                        checked={filterIncludeMultipleChoice}
                         onChange={(e) => setFilterIncludeMultipleChoice(e.target.checked)}
                         className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                       />
                       Câu hỏi trắc nghiệm
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                      <input 
-                        type="checkbox" 
-                        checked={filterIncludeEssay} 
+                      <input
+                        type="checkbox"
+                        checked={filterIncludeEssay}
                         onChange={(e) => setFilterIncludeEssay(e.target.checked)}
                         className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                       />
@@ -616,17 +629,17 @@ export default function App() {
                       </button>
                     )}
                   </label>
-                  <div 
+                  <div
                     onClick={() => imageInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors relative overflow-hidden ${
                       imageBase64 ? 'border-blue-300 bg-slate-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50 cursor-pointer'
                     }`}
                     style={{ minHeight: '160px' }}
                   >
-                    <input 
-                      type="file" 
-                      ref={imageInputRef} 
-                      onChange={handleImageChange} 
+                    <input
+                      type="file"
+                      ref={imageInputRef}
+                      onChange={handleImageChange}
                       accept="image/*"
                       className="hidden"
                     />
@@ -649,16 +662,16 @@ export default function App() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Tải lên file PDF hoặc Word
                     </label>
-                    <div 
+                    <div
                       onClick={() => docInputRef.current?.click()}
                       className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors relative overflow-hidden ${
                         docFileObj ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                       }`}
                     >
-                      <input 
-                        type="file" 
-                        ref={docInputRef} 
-                        onChange={handleDocChange} 
+                      <input
+                        type="file"
+                        ref={docInputRef}
+                        onChange={handleDocChange}
                         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         className="hidden"
                       />
@@ -682,8 +695,8 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Từ trang</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           min="1"
                           value={docStartPage}
                           onChange={(e) => setDocStartPage(e.target.value)}
@@ -693,8 +706,8 @@ export default function App() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Đến trang</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           min="1"
                           value={docEndPage}
                           onChange={(e) => setDocEndPage(e.target.value)}
@@ -724,16 +737,16 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Tải lên các file LaTeX (.tex)
                   </label>
-                  <div 
+                  <div
                     onClick={() => filterFileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                       filterFiles.length > 0 ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                     }`}
                   >
-                    <input 
-                      type="file" 
-                      ref={filterFileInputRef} 
-                      onChange={handleFilterFilesChange} 
+                    <input
+                      type="file"
+                      ref={filterFileInputRef}
+                      onChange={handleFilterFilesChange}
                       accept=".tex,.txt"
                       multiple
                       className="hidden"
@@ -753,7 +766,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  
+
                   {filterFiles.length > 0 && (
                     <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
                       {filterFiles.map((f, idx) => (
@@ -780,16 +793,16 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Tải lên file LaTeX (.tex)
                   </label>
-                  <div 
+                  <div
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                       file ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                     }`}
                   >
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleFileChange} 
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
                       accept=".tex,.txt"
                       className="hidden"
                     />
@@ -949,7 +962,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả phân tích
             </h2>
-            
+
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
@@ -960,7 +973,7 @@ export default function App() {
                   <p className="text-2xl font-bold text-slate-800">{result.totalQuestions}</p>
                 </div>
               </div>
-              
+
               <div className={`p-5 rounded-xl border shadow-sm flex items-center gap-4 ${
                 result.duplicateGroups.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
               }`}>
@@ -989,11 +1002,11 @@ export default function App() {
                         Nhóm trùng lặp #{idx + 1} <span className="font-normal text-red-600">({group.length} câu giống nhau)</span>
                       </h4>
                     </div>
-                    
+
                     <div className="p-4 grid md:grid-cols-2 gap-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-slate-600 mb-2 block">Nội dung câu hỏi:</span>
-                        
+
                         <div className="flex gap-2 mb-2 overflow-x-auto pb-1 shrink-0">
                           {group.map((q, qIdx) => {
                             const isActive = (activeTabByGroup[idx] || 0) === qIdx;
@@ -1002,7 +1015,7 @@ export default function App() {
                                 key={q.id}
                                 onClick={() => setActiveTabByGroup(prev => ({ ...prev, [idx]: qIdx }))}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                                  isActive 
+                                  isActive
                                     ? 'bg-blue-100 text-blue-700 shadow-sm border border-blue-200'
                                     : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
                                 }`}
@@ -1018,7 +1031,7 @@ export default function App() {
                           {group[activeTabByGroup[idx] || 0].content}
                         </div>
                       </div>
-                      
+
                       <div>
                         <span className="text-sm font-medium text-slate-600 mb-2 block">Lựa chọn xử lý:</span>
                         <ul className="space-y-3">
@@ -1034,12 +1047,12 @@ export default function App() {
                                   }`}>
                                     {!isDeleted ? <ShieldCheck className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
                                   </div>
-                                  <div 
+                                  <div
                                     className="cursor-pointer"
                                     onClick={() => setActiveTabByGroup(prev => ({ ...prev, [idx]: qIdx }))}
                                   >
                                     <div className="font-semibold text-slate-800 flex items-center gap-2 mb-0.5 hover:text-blue-600 transition-colors">
-                                      Câu số {q.questionNumber} 
+                                      Câu số {q.questionNumber}
                                       <span className="text-xs font-normal text-slate-500">(Dòng {q.startLine} - {q.endLine})</span>
                                     </div>
                                     <span className={`text-xs font-medium ${!isDeleted ? 'text-green-700' : 'text-red-600'}`}>
@@ -1047,7 +1060,7 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-                                
+
                                 <button
                                   onClick={() => {
                                     setDeletedChunkIds(prev => {
@@ -1124,7 +1137,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả gắn ID
             </h2>
-            
+
             <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <p className="text-sm text-slate-500 font-medium mb-1">Tổng số câu hỏi</p>
@@ -1259,7 +1272,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <textarea
                 value={generatedLatex}
@@ -1327,7 +1340,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <textarea
                 value={docGeneratedLatex}
@@ -1345,7 +1358,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả lọc
             </h2>
-            
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
@@ -1423,7 +1436,7 @@ export default function App() {
 
       </main>
 
-      
+
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4">
@@ -1447,7 +1460,7 @@ export default function App() {
                   Key này sẽ được lưu tạm thời trên trình duyệt của bạn và gửi kèm trong các yêu cầu đến server để sử dụng thay cho Key mặc định của hệ thống.
                 </p>
               </div>
-              
+
               <div className="flex flex-col flex-1 min-h-[300px]">
                 <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                   <Edit3 className="w-4 h-4" /> Tùy chỉnh mẫu main.tex
@@ -1461,7 +1474,7 @@ export default function App() {
                 />
               </div>
             </div>
-            
+
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 mt-4">
               <button
                 onClick={() => setShowSettings(false)}
@@ -1480,7 +1493,6 @@ export default function App() {
         </div>
       )}
 
-      
 
     </div>
   );
