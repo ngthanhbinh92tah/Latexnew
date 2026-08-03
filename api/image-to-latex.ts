@@ -27,21 +27,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : `\\begin{ex}\n%[ID-Here-If-Available]\nnội dung câu hỏi\n\\choice\n{Đáp án A}\n{\\True Đáp án B đúng}\n{Đáp án C}\n{Đáp án D}\n\\loigiai{\nNội dung lời giải chi tiết ở đây\n}\n\\end{ex}`;
 
     const specificRules = isEssay
-      ? `3. This is an essay question. DO NOT include multiple-choice options.`
-      : `3. Use \\choice macro with 4 options, add \\True to the correct one.`;
+      ? `4. This is an essay question. DO NOT include multiple-choice options.`
+      : `4. Use \\choice macro with 4 options, add \\True to the correct one.`;
 
     const prompt = `Convert the math/physics question in this image to LaTeX code, solve it, and provide the solution.
 Format EXACTLY like this:
 ${formatExample}
 Rules:
 1. Wrap in \\begin{ex} \\end{ex}.
-2. Use $...$ or $$...$$ for math.
+2. The line immediately after \\begin{ex} MUST be a comment line starting with "%" followed by the ID in brackets, with NOTHING else on that line, exactly like: %[ID-Here-If-Available]. Never omit the "%" character. If no ID is available, still write "%[]" as a placeholder.
+3. Use $...$ or $$...$$ for math.
 ${specificRules}
-4. Detailed solution inside \\loigiai{ ... }.
-5. Use \\dfrac instead of \\frac.
-6. Remove "Câu 1:", "Câu 2" prefixes.
-7. No "." after A/B/C/D in \\choice.
-8. Output only LaTeX code, no markdown fences.${idsPrompt}`;
+5. Detailed solution inside \\loigiai{ ... }.
+6. Use \\dfrac instead of \\frac.
+7. Remove "Câu 1:", "Câu 2" prefixes.
+8. No "." after A/B/C/D in \\choice.
+9. Output only LaTeX code, no markdown fences.${idsPrompt}`;
 
     const response = await getAiClient(req).models.generateContent({
       model: "gemini-2.5-flash",
