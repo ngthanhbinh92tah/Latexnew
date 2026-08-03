@@ -161,7 +161,8 @@ ${specificRules}
 5. Sử dụng \\dfrac thay cho \\frac đối với tất cả các phân số.
 6. XÓA BỎ các từ bắt đầu câu hỏi như "Câu 1:", "Câu 2", v.v. (Ví dụ: "Câu 4" thì bỏ đi).
 7. KHÔNG ghi dấu "." sau các phương án A, B, C, D ở trong lệnh \\choice.
-8. Only output the LaTeX code. Do not output any markdown formatting like \`\`\`latex or conversational text.${idsPrompt}`;
+8. Only output the LaTeX code. Do not output any markdown formatting like \`\`\`latex or conversational text.
+9. DO NOT generate any extra \\end{ex} or } at the beginning of the response. The response MUST strictly start with \\begin{ex} and end with \\end{ex}.${idsPrompt}`;
 
       const response = await getAiClient(req).models.generateContent({
         model: "gemini-2.5-flash",
@@ -285,7 +286,8 @@ ${specificRules}
 5. Sử dụng \\dfrac thay cho \\frac đối với tất cả các phân số.
 6. XÓA BỎ các từ bắt đầu câu hỏi như "Câu 1:", "Câu 2", v.v. (Ví dụ: "Câu 4" thì bỏ đi).
 7. KHÔNG ghi dấu "." sau các phương án A, B, C, D ở trong lệnh \\choice.
-8. Only output the LaTeX code. Do not output any markdown formatting like \`\`\`latex or conversational text.${idsPrompt}`;
+8. Only output the LaTeX code. Do not output any markdown formatting like \`\`\`latex or conversational text.
+9. DO NOT generate any extra \\end{ex} or } at the beginning of the response. The response MUST strictly start with \\begin{ex} and end with \\end{ex}.${idsPrompt}`;
 
       const parts: any[] = [prompt];
       if (textContent) {
@@ -357,6 +359,7 @@ ${specificRules}
       await fs.copyFile(path.join(process.cwd(), 'randomlist.tex'), path.join(workDir, 'randomlist.tex'));
       
       await fs.writeFile(path.join(workDir, 'bt.tex'), latex, 'utf8');
+      try { await fs.unlink(path.join(workDir, 'main.pdf')); } catch (e) {}
 
       try {
         await execPromise('pdflatex -interaction=nonstopmode main.tex', { cwd: workDir, timeout: 20000 });

@@ -1,0 +1,4 @@
+7. KHÔNG ghi dấu "." sau các phương án A, B, C, D ở trong lệnh \\choice.
+8. Only output the LaTeX code. Do not output any markdown formatting like \`\`\`latex or conversational text.${idsPrompt}`;
+
+      const response = await getAiClient(req).models.generateContent({

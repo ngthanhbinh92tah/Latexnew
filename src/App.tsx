@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Upload, FileText, Download, AlertTriangle, CheckCircle, Search, FileUp, Info, Trash2, ShieldCheck, SlidersHorizontal, Eye, Link, Layers, PlusCircle, Image as ImageIcon, Copy, Filter, Settings, X, Edit3, FilePlus } from 'lucide-react';
 import { parseLatex, ParseResult, assignIds, AssignIdResult, filterQuestionsByIds, FilterResult } from './utils/latexParser';
 import { DEFAULT_ID_LIST } from './data/defaultIds';
@@ -25,17 +25,17 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [envs, setEnvs] = useState('ex, cau, question, bt, bai, vd');
-
+  
   // Dedupe state
   const [similarityThreshold, setSimilarityThreshold] = useState(95);
   const [result, setResult] = useState<ParseResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [deletedChunkIds, setDeletedChunkIds] = useState<Set<number>>(new Set());
   const [activeTabByGroup, setActiveTabByGroup] = useState<Record<number, number>>({});
-
+  
   // Assign ID state
   const [idListText, setIdListText] = useState('');
-  const [useDefaultIds, setUseDefaultIds] = useState(false);
+  const [useDefaultIds, setUseDefaultIds] = useState(true);
   const [assignResult, setAssignResult] = useState<AssignIdResult | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
 
@@ -59,7 +59,26 @@ export default function App() {
   const [filterFiles, setFilterFiles] = useState<File[]>([]);
   const [filterFilesContent, setFilterFilesContent] = useState<{name: string, content: string}[]>([]);
   const [filterIdList, setFilterIdList] = useState<string>('');
+  const [filterSelections, setFilterSelections] = useState<Record<string, {checked: boolean, count: string}>>({});
   const [filterResult, setFilterResult] = useState<FilterResult | null>(null);
+  const [filterClass, setFilterClass] = useState<string>('');
+  const [filterSubject, setFilterSubject] = useState<string>('');
+  const [filterChapter, setFilterChapter] = useState<string>('');
+
+  const availableIds = useMemo(() => {
+    if (!idListText) return [];
+    const lines = idListText.split('\n').map(l => l.trim()).filter(Boolean);
+    const ids: { id: string, desc: string, fullLine: string }[] = [];
+    lines.forEach(line => {
+      const match = line.match(/^(\[[^\]]+\])(.*)/);
+      if (match) {
+         ids.push({ id: match[1].trim(), desc: match[2].trim(), fullLine: line });
+      }
+    });
+    return ids;
+  }, [idListText]);
+
+  const hasSelectedIds = filterIdList.trim().length > 0 || availableIds.some(id => filterSelections[id.id]?.checked);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterIncludeEssay, setFilterIncludeEssay] = useState(true);
   const [filterIncludeMultipleChoice, setFilterIncludeMultipleChoice] = useState(true);
@@ -123,19 +142,19 @@ export default function App() {
 
   const handleAnalyze = () => {
     if (!fileContent) return;
-
+    
     setIsAnalyzing(true);
     // Simulate slight delay for UX feeling of processing
     setTimeout(() => {
       const parsedResult = parseLatex(fileContent, envs, similarityThreshold / 100);
       setResult(parsedResult);
-
+      
       const initialDeleted = new Set<number>();
       parsedResult.chunks.forEach(c => {
         if (c.isDuplicate) initialDeleted.add(c.id);
       });
       setDeletedChunkIds(initialDeleted);
-
+      
       setIsAnalyzing(false);
     }, 300);
   };
@@ -170,18 +189,18 @@ export default function App() {
   const handleFilterFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newFiles = Array.from(e.target.files || []) as File[];
     if (newFiles.length === 0) return;
-
+    
     const updatedFiles = [...filterFiles, ...newFiles];
     setFilterFiles(updatedFiles);
     setFilterResult(null);
-
+    
     const readNewFiles = await Promise.all(newFiles.map(async (f: File) => {
       const text = await f.text();
       return { name: f.name, content: text };
     }));
-
+    
     setFilterFilesContent([...filterFilesContent, ...readNewFiles]);
-
+    
     if (filterFileInputRef.current) {
       filterFileInputRef.current.value = ''; // Reset input so same file can be selected again
     }
@@ -191,20 +210,37 @@ export default function App() {
     const newFiles = [...filterFiles];
     newFiles.splice(index, 1);
     setFilterFiles(newFiles);
-
+    
     const newFilesContent = [...filterFilesContent];
     newFilesContent.splice(index, 1);
     setFilterFilesContent(newFilesContent);
-
+    
     setFilterResult(null);
   };
 
   const handleFilter = () => {
-    if (filterFilesContent.length === 0 || !filterIdList) return;
-    setIsFiltering(true);
+    let combinedFilterIds = filterIdList.trim();
+    if (availableIds.length > 0) {
+      const selectedFromList = availableIds
+        .filter(item => filterSelections[item.id]?.checked)
+        .map(item => {
+          const count = filterSelections[item.id]?.count;
+          return count ? `${item.id} ${count}` : item.id;
+        })
+        .join('\n');
+      if (selectedFromList) {
+        combinedFilterIds = combinedFilterIds ? `${selectedFromList}\n${combinedFilterIds}` : selectedFromList;
+      }
+    }
 
+    if (filterFilesContent.length === 0 || !combinedFilterIds) {
+      alert("Vui lòng nhập hoặc chọn ID cần lọc.");
+      return;
+    }
+    setIsFiltering(true);
+    
     setTimeout(() => {
-      const result = filterQuestionsByIds(filterFilesContent, envs, filterIdList, filterIncludeEssay, filterIncludeMultipleChoice);
+      const result = filterQuestionsByIds(filterFilesContent, envs, combinedFilterIds, filterIncludeEssay, filterIncludeMultipleChoice);
       setFilterResult(result);
       setIsFiltering(false);
     }, 100);
@@ -216,7 +252,7 @@ export default function App() {
   };
 
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [mainTexContent, setMainTexContent] = useState<string>('');
+    const [mainTexContent, setMainTexContent] = useState<string>('');
 
   useEffect(() => {
     // Fetch default main.tex when component mounts
@@ -242,26 +278,13 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ latex: content, mainTex })
       });
-
+      
       if (!response.ok) {
         throw new Error('Failed to compile PDF');
       }
-
+      
       const data = await response.json();
-      if (data.url) {
-        // Chuyển data URL (base64) thành Blob URL để trình duyệt cho phép mở tab mới
-        // (data: URL bị hầu hết trình duyệt chặn khi dùng trực tiếp với window.open)
-        const base64 = data.url.split(',')[1];
-        const byteChars = atob(base64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) {
-          byteNumbers[i] = byteChars.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-      }
+      if (data.url) window.open(data.url, '_blank');
     } catch (error) {
       console.error("Error compiling PDF:", error);
       alert("Đã xảy ra lỗi khi biên dịch PDF. Hãy chắc chắn rằng pdflatex đã được cài đặt và nội dung LaTeX hợp lệ.");
@@ -270,7 +293,7 @@ export default function App() {
     }
   };
 
-
+  
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -290,10 +313,10 @@ export default function App() {
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (activeTab !== 'image-to-latex') return;
-
+      
       const items = e.clipboardData?.items;
       if (!items) return;
-
+      
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
@@ -304,7 +327,7 @@ export default function App() {
         }
       }
     };
-
+    
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   }, [activeTab]);
@@ -363,8 +386,8 @@ export default function App() {
       const response = await fetch('/api/doc-to-latex', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          fileBase64: docBase64,
+        body: JSON.stringify({ 
+          fileBase64: docBase64, 
           mimeType: docFileObj.type || (docFileObj.name.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf'),
           startPage: docStartPage,
           endPage: docEndPage,
@@ -410,7 +433,7 @@ export default function App() {
               LaTeX Duplicate Finder & ID Assigner
             </h1>
           </div>
-          <button
+          <button 
             onClick={() => setShowSettings(true)}
             className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
             title="Cài đặt API Key"
@@ -421,10 +444,10 @@ export default function App() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-
+        
         {/* Tabs */}
         <div className="flex gap-4 border-b border-slate-200">
-          <button
+          <button 
             onClick={() => setActiveTab('dedupe')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'dedupe' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -434,7 +457,7 @@ export default function App() {
             </div>
             {activeTab === 'dedupe' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button
+          <button 
             onClick={() => setActiveTab('assign-id')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'assign-id' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -444,7 +467,7 @@ export default function App() {
             </div>
             {activeTab === 'assign-id' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button
+          <button 
             onClick={() => setActiveTab('image-to-latex')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'image-to-latex' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -454,7 +477,7 @@ export default function App() {
             </div>
             {activeTab === 'image-to-latex' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button
+          <button 
             onClick={() => setActiveTab('filter-by-id')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'filter-by-id' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -464,7 +487,7 @@ export default function App() {
             </div>
             {activeTab === 'filter-by-id' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
           </button>
-          <button
+          <button 
             onClick={() => setActiveTab('doc-to-latex')}
             className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'doc-to-latex' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -483,7 +506,7 @@ export default function App() {
               1. Cấu hình & Chọn File
             </h2>
           </div>
-
+          
           <div className="p-6 grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               {activeTab !== 'image-to-latex' && activeTab !== 'filter-by-id' && activeTab !== 'doc-to-latex' && (
@@ -553,10 +576,10 @@ export default function App() {
                         Tải file (.txt, .tex)
                       </button>
                     </div>
-                    <input
-                      type="file"
-                      ref={idFileInputRef}
-                      onChange={handleIdFileChange}
+                    <input 
+                      type="file" 
+                      ref={idFileInputRef} 
+                      onChange={handleIdFileChange} 
                       accept=".tex,.txt"
                       className="hidden"
                     />
@@ -578,11 +601,147 @@ export default function App() {
               )}
 
               {activeTab === 'filter-by-id' && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Danh sách ID cần lọc (mỗi ID một dòng)
-                  </label>
-                  <textarea
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Chọn ID từ danh sách (Tab 2)
+                      </label>
+                      {availableIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const filteredList = availableIds.filter(item => {
+                              const match = item.id.match(/^\[(\d+)([A-Za-z]+)(\d*)/);
+                              if (!match) return true;
+                              const [_, iClass, iSubj, iChap] = match;
+                              if (filterClass && iClass !== filterClass) return false;
+                              if (filterSubject && iSubj.toUpperCase() !== filterSubject.toUpperCase()) return false;
+                              if (filterChapter && iChap !== filterChapter) return false;
+                              return true;
+                            });
+                            const allChecked = filteredList.every(id => filterSelections[id.id]?.checked);
+                            const newSelections = { ...filterSelections };
+                            filteredList.forEach(id => {
+                              newSelections[id.id] = { ...newSelections[id.id], checked: !allChecked };
+                            });
+                            setFilterSelections(newSelections);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded"
+                        >
+                          {(() => {
+                            const filteredList = availableIds.filter(item => {
+                              const match = item.id.match(/^\[(\d+)([A-Za-z]+)(\d*)/);
+                              if (!match) return true;
+                              const [_, iClass, iSubj, iChap] = match;
+                              if (filterClass && iClass !== filterClass) return false;
+                              if (filterSubject && iSubj.toUpperCase() !== filterSubject.toUpperCase()) return false;
+                              if (filterChapter && iChap !== filterChapter) return false;
+                              return true;
+                            });
+                            return filteredList.length > 0 && filteredList.every(id => filterSelections[id.id]?.checked) ? 'Bỏ chọn tất cả' : 'Chọn tất cả';
+                          })()}
+                        </button>
+                      )}
+                    </div>
+                    {availableIds.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div>
+                          <select
+                            value={filterClass}
+                            onChange={(e) => setFilterClass(e.target.value)}
+                            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          >
+                            <option value="">Tất cả lớp</option>
+                            <option value="6">Lớp 6</option>
+                            <option value="7">Lớp 7</option>
+                            <option value="8">Lớp 8</option>
+                            <option value="9">Lớp 9</option>
+                            <option value="10">Lớp 10</option>
+                            <option value="11">Lớp 11</option>
+                            <option value="12">Lớp 12</option>
+                          </select>
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Phân môn (D, H...)"
+                            value={filterSubject}
+                            onChange={(e) => setFilterSubject(e.target.value.toUpperCase())}
+                            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white placeholder:normal-case uppercase"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Chương (1, 2...)"
+                            value={filterChapter}
+                            onChange={(e) => setFilterChapter(e.target.value)}
+                            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {availableIds.length > 0 ? (
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-60 overflow-y-auto bg-slate-50">
+                        {availableIds.filter(item => {
+                          const match = item.id.match(/^\[(\d+)([A-Za-z]+)(\d*)/);
+                          if (!match) return true;
+                          const [_, iClass, iSubj, iChap] = match;
+                          if (filterClass && iClass !== filterClass) return false;
+                          if (filterSubject && iSubj.toUpperCase() !== filterSubject.toUpperCase()) return false;
+                          if (filterChapter && iChap !== filterChapter) return false;
+                          return true;
+                        }).map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-100 transition-colors">
+                            <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                              <input 
+                                type="checkbox"
+                                checked={!!filterSelections[item.id]?.checked}
+                                onChange={(e) => {
+                                  setFilterSelections(prev => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], checked: e.target.checked }
+                                  }));
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                              />
+                              <div className="truncate text-sm">
+                                <span className="font-bold text-slate-700 mr-2">{item.id}</span>
+                                <span className="text-slate-500">{item.desc}</span>
+                              </div>
+                            </label>
+                            <div className="ml-4 flex items-center gap-2 shrink-0">
+                              <span className="text-xs text-slate-500">SL:</span>
+                              <input 
+                                type="number" 
+                                min="1"
+                                placeholder="Tất cả"
+                                value={filterSelections[item.id]?.count || ''}
+                                onChange={(e) => {
+                                  setFilterSelections(prev => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], count: e.target.value, checked: true }
+                                  }));
+                                }}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500 italic p-4 border border-slate-200 rounded-lg bg-slate-50">
+                        Chưa có danh sách ID. Vui lòng sang tab "Gắn ID" để nhập danh sách.
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      {availableIds.length > 0 ? "Hoặc nhập ID bổ sung (mỗi ID một dòng)" : "Danh sách ID cần lọc (mỗi ID một dòng)"}
+                    </label>
+                    <textarea
                     value={filterIdList}
                     onChange={(e) => setFilterIdList(e.target.value)}
                     className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all h-32 resize-none font-mono text-sm"
@@ -594,18 +753,18 @@ export default function App() {
                   </p>
                   <div className="flex items-center gap-4 mt-3">
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={filterIncludeMultipleChoice}
+                      <input 
+                        type="checkbox" 
+                        checked={filterIncludeMultipleChoice} 
                         onChange={(e) => setFilterIncludeMultipleChoice(e.target.checked)}
                         className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                       />
                       Câu hỏi trắc nghiệm
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={filterIncludeEssay}
+                      <input 
+                        type="checkbox" 
+                        checked={filterIncludeEssay} 
                         onChange={(e) => setFilterIncludeEssay(e.target.checked)}
                         className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                       />
@@ -613,6 +772,7 @@ export default function App() {
                     </label>
                   </div>
                 </div>
+              </div>
               )}
 
               {activeTab === 'image-to-latex' && (
@@ -629,17 +789,17 @@ export default function App() {
                       </button>
                     )}
                   </label>
-                  <div
+                  <div 
                     onClick={() => imageInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors relative overflow-hidden ${
                       imageBase64 ? 'border-blue-300 bg-slate-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50 cursor-pointer'
                     }`}
                     style={{ minHeight: '160px' }}
                   >
-                    <input
-                      type="file"
-                      ref={imageInputRef}
-                      onChange={handleImageChange}
+                    <input 
+                      type="file" 
+                      ref={imageInputRef} 
+                      onChange={handleImageChange} 
                       accept="image/*"
                       className="hidden"
                     />
@@ -662,16 +822,16 @@ export default function App() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       Tải lên file PDF hoặc Word
                     </label>
-                    <div
+                    <div 
                       onClick={() => docInputRef.current?.click()}
                       className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors relative overflow-hidden ${
                         docFileObj ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                       }`}
                     >
-                      <input
-                        type="file"
-                        ref={docInputRef}
-                        onChange={handleDocChange}
+                      <input 
+                        type="file" 
+                        ref={docInputRef} 
+                        onChange={handleDocChange} 
                         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         className="hidden"
                       />
@@ -695,8 +855,8 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Từ trang</label>
-                        <input
-                          type="number"
+                        <input 
+                          type="number" 
                           min="1"
                           value={docStartPage}
                           onChange={(e) => setDocStartPage(e.target.value)}
@@ -706,8 +866,8 @@ export default function App() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Đến trang</label>
-                        <input
-                          type="number"
+                        <input 
+                          type="number" 
                           min="1"
                           value={docEndPage}
                           onChange={(e) => setDocEndPage(e.target.value)}
@@ -737,16 +897,16 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Tải lên các file LaTeX (.tex)
                   </label>
-                  <div
+                  <div 
                     onClick={() => filterFileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                       filterFiles.length > 0 ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                     }`}
                   >
-                    <input
-                      type="file"
-                      ref={filterFileInputRef}
-                      onChange={handleFilterFilesChange}
+                    <input 
+                      type="file" 
+                      ref={filterFileInputRef} 
+                      onChange={handleFilterFilesChange} 
                       accept=".tex,.txt"
                       multiple
                       className="hidden"
@@ -766,7 +926,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-
+                  
                   {filterFiles.length > 0 && (
                     <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
                       {filterFiles.map((f, idx) => (
@@ -793,16 +953,16 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Tải lên file LaTeX (.tex)
                   </label>
-                  <div
+                  <div 
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                       file ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                     }`}
                   >
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileChange} 
                       accept=".tex,.txt"
                       className="hidden"
                     />
@@ -936,7 +1096,7 @@ export default function App() {
               {activeTab === 'filter-by-id' && (
                 <button
                   onClick={handleFilter}
-                  disabled={filterFilesContent.length === 0 || isFiltering || !filterIdList}
+                  disabled={filterFilesContent.length === 0 || isFiltering || !hasSelectedIds}
                   className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
                 >
                   {isFiltering ? (
@@ -962,7 +1122,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả phân tích
             </h2>
-
+            
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
@@ -973,7 +1133,7 @@ export default function App() {
                   <p className="text-2xl font-bold text-slate-800">{result.totalQuestions}</p>
                 </div>
               </div>
-
+              
               <div className={`p-5 rounded-xl border shadow-sm flex items-center gap-4 ${
                 result.duplicateGroups.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
               }`}>
@@ -1002,11 +1162,11 @@ export default function App() {
                         Nhóm trùng lặp #{idx + 1} <span className="font-normal text-red-600">({group.length} câu giống nhau)</span>
                       </h4>
                     </div>
-
+                    
                     <div className="p-4 grid md:grid-cols-2 gap-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-slate-600 mb-2 block">Nội dung câu hỏi:</span>
-
+                        
                         <div className="flex gap-2 mb-2 overflow-x-auto pb-1 shrink-0">
                           {group.map((q, qIdx) => {
                             const isActive = (activeTabByGroup[idx] || 0) === qIdx;
@@ -1015,7 +1175,7 @@ export default function App() {
                                 key={q.id}
                                 onClick={() => setActiveTabByGroup(prev => ({ ...prev, [idx]: qIdx }))}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                                  isActive
+                                  isActive 
                                     ? 'bg-blue-100 text-blue-700 shadow-sm border border-blue-200'
                                     : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
                                 }`}
@@ -1031,7 +1191,7 @@ export default function App() {
                           {group[activeTabByGroup[idx] || 0].content}
                         </div>
                       </div>
-
+                      
                       <div>
                         <span className="text-sm font-medium text-slate-600 mb-2 block">Lựa chọn xử lý:</span>
                         <ul className="space-y-3">
@@ -1047,12 +1207,12 @@ export default function App() {
                                   }`}>
                                     {!isDeleted ? <ShieldCheck className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
                                   </div>
-                                  <div
+                                  <div 
                                     className="cursor-pointer"
                                     onClick={() => setActiveTabByGroup(prev => ({ ...prev, [idx]: qIdx }))}
                                   >
                                     <div className="font-semibold text-slate-800 flex items-center gap-2 mb-0.5 hover:text-blue-600 transition-colors">
-                                      Câu số {q.questionNumber}
+                                      Câu số {q.questionNumber} 
                                       <span className="text-xs font-normal text-slate-500">(Dòng {q.startLine} - {q.endLine})</span>
                                     </div>
                                     <span className={`text-xs font-medium ${!isDeleted ? 'text-green-700' : 'text-red-600'}`}>
@@ -1060,7 +1220,7 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-
+                                
                                 <button
                                   onClick={() => {
                                     setDeletedChunkIds(prev => {
@@ -1137,7 +1297,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả gắn ID
             </h2>
-
+            
             <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <p className="text-sm text-slate-500 font-medium mb-1">Tổng số câu hỏi</p>
@@ -1272,7 +1432,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-
+            
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <textarea
                 value={generatedLatex}
@@ -1340,7 +1500,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-
+            
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <textarea
                 value={docGeneratedLatex}
@@ -1358,7 +1518,7 @@ export default function App() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               2. Kết quả lọc
             </h2>
-
+            
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
@@ -1436,7 +1596,7 @@ export default function App() {
 
       </main>
 
-
+      
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4">
@@ -1460,7 +1620,7 @@ export default function App() {
                   Key này sẽ được lưu tạm thời trên trình duyệt của bạn và gửi kèm trong các yêu cầu đến server để sử dụng thay cho Key mặc định của hệ thống.
                 </p>
               </div>
-
+              
               <div className="flex flex-col flex-1 min-h-[300px]">
                 <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                   <Edit3 className="w-4 h-4" /> Tùy chỉnh mẫu main.tex
@@ -1474,7 +1634,7 @@ export default function App() {
                 />
               </div>
             </div>
-
+            
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 mt-4">
               <button
                 onClick={() => setShowSettings(false)}
@@ -1493,6 +1653,7 @@ export default function App() {
         </div>
       )}
 
+      
 
     </div>
   );
